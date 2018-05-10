@@ -2,9 +2,19 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266SSDP.h>
 #include <EEPROM.h>
+#include <PubSubClient.h>
 #include <ArduinoJson.h>
 
+const char * MQTT_SERVER = "192.168.0.110";
+const char * MQTT_USER = "admin";
+const char * MQTT_PASS = "root";
+const char * MQTT_TOPIC = "/admin/smoke/";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 ESP8266WebServer server(80);
+
+int mqttTimeout = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -17,11 +27,18 @@ void setup() {
   setup_ssdp();
   setup_webserver();
   setup_accesspoint();
+  setup_mqtt();
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   server.handleClient();
+  if (!client.connected() && mqttTimeout++ > 300000) {
+    mqttTimeout = 0;
+    connect_mqtt();
+  } else {
+  client.loop();
+  }
 }
 /*
  * CUSTOM FUNCTIONS
@@ -68,6 +85,21 @@ void loop() {
  void setup_accesspoint() {
   Serial.println("Configuring access point...");
   WiFi.softAP("smokedetectorV2");
+ }
+ void setup_mqtt() {
+  client.setServer(MQTT_SERVER, 1883);
+ }
+ void connect_mqtt() { 
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("SmokeDetectorClient", MQTT_USER, MQTT_PASS)) {
+      Serial.println("connected");
+      client.publish(MQTT_TOPIC, "hello world");
+      // ... and resubscribe
+      client.subscribe(MQTT_TOPIC);
+    } else {
+      Serial.println("failed");
+    }
  }
  /*
   *  ROM FUNCTIONS
@@ -132,8 +164,6 @@ void handleConnect() {
   if(setup_wifi(ssid, password) == 1) {
     Serial.println("Connected.");
     server.send(200, "text/plain", "1");
-    delay(1000);
-    saveToROM = 1;
   } else {
     server.send(200, "text/plain", "0");
   }
