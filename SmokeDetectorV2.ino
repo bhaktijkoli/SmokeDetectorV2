@@ -12,7 +12,7 @@ const char * MQTT_PASS = "root";
 const char * MQTT_TOPIC = "/admin/smoke/";
 const int INPUT_PIN = D2;
 const int MQTT_INTERVAL = 300000;
-const int SLEEPINTERVAL = 50000;
+const int SLEEPINTERVAL = 30000000;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -25,7 +25,7 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(INPUT_PIN, INPUT);
   Serial.begin(115200);
-  Serial.setDebugOutput(true);
+//  Serial.setDebugOutput(true);
   Serial.println("ESP Booted");
   String ssid = readEEPROM(0, 40);
   String password = readEEPROM(41, 80);
@@ -46,6 +46,7 @@ void loop() {
   if(client.connected()) {
     client.loop();
     if(digitalRead(INPUT_PIN) == HIGH) {
+      Serial.println("Smoke detected");
       client.publish(MQTT_TOPIC, "alert");
       delay(10000);
     }
@@ -60,7 +61,8 @@ void loop() {
 * CUSTOM FUNCTIONS
 */
 int setup_wifi(String ssid, String password) {
-  Serial.print("Connecting");
+  Serial.print("Connecting to ");
+  Serial.print(ssid);
   int count = 0;
   WiFi.begin(ssid.c_str(), password.c_str());
   while (WiFi.status() != WL_CONNECTED) {
@@ -123,13 +125,10 @@ void connect_mqtt() {
 void writeEEPROM(int startAdr, int laenge, String writeString) {
   EEPROM.begin(512); //Max bytes of eeprom to use
   yield();
-  Serial.println();
-  Serial.print("writing EEPROM: ");
   //write to eeprom 
   for (int i = 0; i < laenge; i++)
   {
     EEPROM.write(startAdr + i, writeString[i]);
-    Serial.print(writeString[i]);
   }
   EEPROM.commit();
   EEPROM.end();
@@ -144,8 +143,6 @@ String readEEPROM(int startAdr, int maxLength) {
     dest += char(EEPROM.read(startAdr + i));
   }
   EEPROM.end();    
-  Serial.print("ready reading EEPROM:");
-  Serial.println(dest);
   return dest;
 }
 
