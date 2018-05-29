@@ -3,16 +3,22 @@
 #include <ESP8266SSDP.h>
 #include <EEPROM.h>
 #include <PubSubClient.h>
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
 
-const char * MQTT_SERVER = "bhkdev2.tk";
+const char * MQTT_SERVER = "bhkautomation.tk";
 const int MQTT_PORT = 3011;
 const char * MQTT_USER = "admin";
 const char * MQTT_PASS = "root";
 const char * MQTT_TOPIC = "/admin/smoke/";
+const int VERSION = 4;
+const char * UPDATE_URL = "http://bhkautomation.tk:3012/smoke/v5.bin";
 const int INPUT_PIN = D2;
+const int LED_PIN = D1;
 const int MQTT_INTERVAL = 300000;
-const int SLEEPINTERVAL = 30000000;
+const int UPDATE_INTERVAL = 3000000;
+const int SLEEP_INTERVAL = 30000000;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -20,20 +26,22 @@ ESP8266WebServer server(80);
 
 int mqttInterval = MQTT_INTERVAL;
 int sleepInterval = 0;
+int updateCheck = 0;
 
 void setup() {
   // put your setup code here, to run once:
   pinMode(INPUT_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
 //  Serial.setDebugOutput(true);
   Serial.println("ESP Booted");
+  Serial.printf("Version: %i\n", VERSION);
   String ssid = readEEPROM(0, 40);
   String password = readEEPROM(41, 80);
+  setup_accesspoint();
   setup_wifi(ssid, password);
   setup_ssdp();
   setup_webserver();
-  setup_accesspoint();
-  setup_mqtt();
 }
 
 void loop() {
@@ -42,6 +50,7 @@ void loop() {
   if (!client.connected() && mqttInterval++ > MQTT_INTERVAL) {
     mqttInterval = 0;
     connect_mqtt();
+    digitalWrite(LED_PIN, HIGH);
   }
   if(client.connected()) {
     client.loop();
@@ -50,12 +59,9 @@ void loop() {
       client.publish(MQTT_TOPIC, "alert");
       delay(10000);
     }
+    digitalWrite(LED_PIN, LOW);
   }
-  if(WiFi.status() == WL_CONNECTED && sleepInterval++ > SLEEPINTERVAL) {
-    delay(500);
-    Serial.println("Going to sleep mode");
-    ESP.deepSleep(0);
-  }
+  if(WiFi.status() == WL_CONNECTED && sleepInterval > UPDATE_INTERVAL && updateCheck == 0) checkforupdate();
 }
 /*
 * CUSTOM FUNCTIONS
@@ -108,7 +114,8 @@ void setup_accesspoint() {
 void setup_mqtt() {
   client.setServer(MQTT_SERVER, MQTT_PORT);
 }
-void connect_mqtt() { 
+void connect_mqtt() {
+  setup_mqtt();
   Serial.print("Attempting MQTT connection...");
   // Attempt to connect
   if (client.connect("SmokeDetectorClient", MQTT_USER, MQTT_PASS)) {
@@ -118,6 +125,23 @@ void connect_mqtt() {
     Serial.println("failed");
   }
   sleepInterval=0;
+  delay(1000);
+}
+void checkforupdate() {
+   Serial.println("Checking for update....");
+   for(int i=0; i<3; i++) {
+    digitalWrite(LED_PIN,HIGH);
+    delay(500);
+    digitalWrite(LED_PIN,LOW);
+    delay(500);
+   }
+   t_httpUpdate_return ret = ESPhttpUpdate.update(UPDATE_URL);
+   if(ret == HTTP_UPDATE_OK) {
+      Serial.println("Update found, updating...");
+   }else {
+    Serial.println("No updates available");
+   }
+   updateCheck=1;
 }
 /*
 *  ROM FUNCTIONS
